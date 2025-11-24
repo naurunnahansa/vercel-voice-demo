@@ -54,7 +54,9 @@ export async function DELETE(request: Request) {
       },
     });
 
-    if (!response.ok) {
+    // Accept success, not found (already ended), or gone (expired) as valid responses
+    if (!response.ok && response.status !== 404 && response.status !== 410) {
+      console.error(`Failed to end call ${callId}: ${response.status}`);
       throw new Error("Failed to end call");
     }
 
