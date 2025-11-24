@@ -48,10 +48,13 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
   const updateTranscripts = useCallback(() => {
     if (!sessionRef.current) return;
 
-    const transcripts = sessionRef.current.transcripts.map((t) => ({
-      role: t.speaker === "user" ? "user" : "assistant",
-      text: t.text,
-    }));
+    const transcripts = sessionRef.current.transcripts.map((t) => {
+      const speaker = (t.speaker || "").toLowerCase();
+      return {
+        role: speaker === "user" ? "user" : "assistant",
+        text: t.text,
+      };
+    });
 
     setState((prev) => ({ ...prev, transcripts }));
     options.onTranscriptUpdate?.(transcripts);
