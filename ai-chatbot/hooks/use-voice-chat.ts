@@ -110,6 +110,32 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
         }
       });
 
+      // Register web search tool handler
+      session.registerToolImplementation(
+        "webSearch",
+        async (parameters: Record<string, unknown>) => {
+          const query = parameters.query as string;
+
+          try {
+            const response = await fetch("/api/search", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ query }),
+            });
+
+            if (!response.ok) {
+              return "Search failed. Please try again.";
+            }
+
+            const { summary } = await response.json();
+            return summary || "No results found.";
+          } catch (error) {
+            console.error("Web search error:", error);
+            return "Search failed due to an error.";
+          }
+        }
+      );
+
       await session.joinCall(joinUrl);
 
       setState((prev) => ({
