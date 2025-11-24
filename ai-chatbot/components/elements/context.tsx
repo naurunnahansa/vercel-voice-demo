@@ -164,7 +164,7 @@ export const Context = ({ className, usage, ...props }: ContextProps) => {
                   : undefined
               }
             />
-            {usage?.costUSD?.totalUSD !== undefined && (
+            {usage?.costUSD?.totalUSD != null && (
               <>
                 <Separator className="mt-1" />
                 <div className="flex items-center justify-between pt-1 text-xs">

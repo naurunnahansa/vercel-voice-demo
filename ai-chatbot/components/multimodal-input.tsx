@@ -42,6 +42,10 @@ import {
   PaperclipIcon,
   StopIcon,
 } from "./icons";
+import { Mic, MicOff, Phone, PhoneOff } from "lucide-react";
+import { useVoiceChat } from "@/hooks/use-voice-chat";
+import { UltravoxSessionStatus } from "ultravox-client";
+import { generateUUID } from "@/lib/utils";
 import { PreviewAttachment } from "./preview-attachment";
 import { SuggestedActions } from "./suggested-actions";
 import { Button } from "./ui/button";
@@ -128,6 +132,50 @@ function PureMultimodalInput({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadQueue, setUploadQueue] = useState<string[]>([]);
+  const lastTranscriptCountRef = useRef(0);
+
+  const {
+    isConnected: isVoiceConnected,
+    isConnecting: isVoiceConnecting,
+    status: voiceStatus,
+    isMuted,
+    transcripts,
+    startCall,
+    endCall,
+    toggleMute,
+  } = useVoiceChat({
+    onTranscriptUpdate: (newTranscripts) => {
+      // Only add new transcripts as messages
+      if (newTranscripts.length > lastTranscriptCountRef.current) {
+        const newOnes = newTranscripts.slice(lastTranscriptCountRef.current);
+        newOnes.forEach((t) => {
+          const messageId = generateUUID();
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: messageId,
+              role: t.role as "user" | "assistant",
+              parts: [{ type: "text", text: t.text }],
+              createdAt: new Date(),
+            },
+          ]);
+        });
+        lastTranscriptCountRef.current = newTranscripts.length;
+      }
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
+
+  // Reset transcript count when call ends
+  useEffect(() => {
+    if (!isVoiceConnected && !isVoiceConnecting) {
+      lastTranscriptCountRef.current = 0;
+    }
+  }, [isVoiceConnected, isVoiceConnecting]);
+
+  const isVoiceActive = isVoiceConnected || isVoiceConnecting;
 
   const submitForm = useCallback(() => {
     window.history.pushState({}, "", `/chat/${chatId}`);
@@ -378,6 +426,44 @@ function PureMultimodalInput({
               onModelChange={onModelChange}
               selectedModelId={selectedModelId}
             />
+            {isVoiceActive ? (
+              <>
+                <Button
+                  variant="ghost"
+                  className="h-8 px-2"
+                  onClick={toggleMute}
+                >
+                  {isMuted ? (
+                    <MicOff size={16} className="text-destructive" />
+                  ) : (
+                    <Mic size={16} className="text-green-600" />
+                  )}
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="h-8 px-2"
+                  onClick={endCall}
+                >
+                  <PhoneOff size={16} className="text-destructive" />
+                </Button>
+                <span className="text-xs text-muted-foreground px-2">
+                  {voiceStatus === UltravoxSessionStatus.LISTENING && "Listening..."}
+                  {voiceStatus === UltravoxSessionStatus.THINKING && "Thinking..."}
+                  {voiceStatus === UltravoxSessionStatus.SPEAKING && "Speaking..."}
+                  {voiceStatus === UltravoxSessionStatus.CONNECTING && "Connecting..."}
+                </span>
+              </>
+            ) : (
+              <Button
+                variant="ghost"
+                className="h-8 px-2"
+                onClick={startCall}
+                disabled={status !== "ready"}
+              >
+                <Phone size={16} />
+                <span className="hidden text-xs sm:block ml-1">Voice</span>
+              </Button>
+            )}
           </PromptInputTools>
 
           {status === "submitted" ? (
