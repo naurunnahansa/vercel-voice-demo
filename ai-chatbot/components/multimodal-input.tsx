@@ -132,7 +132,7 @@ function PureMultimodalInput({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadQueue, setUploadQueue] = useState<string[]>([]);
-  const lastTranscriptCountRef = useRef(0);
+  const transcriptMessageIdsRef = useRef<string[]>([]);
 
   const {
     isConnected: isVoiceConnected,
@@ -145,33 +145,45 @@ function PureMultimodalInput({
     toggleMute,
   } = useVoiceChat({
     onTranscriptUpdate: (newTranscripts) => {
-      // Only add new transcripts as messages
-      if (newTranscripts.length > lastTranscriptCountRef.current) {
-        const newOnes = newTranscripts.slice(lastTranscriptCountRef.current);
-        newOnes.forEach((t) => {
-          const messageId = generateUUID();
-          setMessages((prev) => [
-            ...prev,
-            {
+      setMessages((prevMessages) => {
+        const updatedMessages = [...prevMessages];
+
+        newTranscripts.forEach((t, index) => {
+          if (index < transcriptMessageIdsRef.current.length) {
+            // Update existing message
+            const messageId = transcriptMessageIdsRef.current[index];
+            const messageIndex = updatedMessages.findIndex((m) => m.id === messageId);
+            if (messageIndex !== -1) {
+              updatedMessages[messageIndex] = {
+                ...updatedMessages[messageIndex],
+                parts: [{ type: "text", text: t.text }],
+              };
+            }
+          } else {
+            // Add new message
+            const messageId = generateUUID();
+            transcriptMessageIdsRef.current.push(messageId);
+            updatedMessages.push({
               id: messageId,
               role: t.role as "user" | "assistant",
               parts: [{ type: "text", text: t.text }],
               createdAt: new Date(),
-            },
-          ]);
+            });
+          }
         });
-        lastTranscriptCountRef.current = newTranscripts.length;
-      }
+
+        return updatedMessages;
+      });
     },
     onError: (error) => {
       toast.error(error.message);
     },
   });
 
-  // Reset transcript count when call ends
+  // Reset transcript message IDs when call ends
   useEffect(() => {
     if (!isVoiceConnected && !isVoiceConnecting) {
-      lastTranscriptCountRef.current = 0;
+      transcriptMessageIdsRef.current = [];
     }
   }, [isVoiceConnected, isVoiceConnecting]);
 
