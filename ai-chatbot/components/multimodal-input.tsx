@@ -43,7 +43,7 @@ import {
   StopIcon,
 } from "./icons";
 import { Mic, MicOff, Phone, PhoneOff } from "lucide-react";
-import { useVoiceChat } from "@/hooks/use-voice-chat";
+import { useVoiceChat, type ToolCall } from "@/hooks/use-voice-chat";
 import { UltravoxSessionStatus } from "ultravox-client";
 import { generateUUID } from "@/lib/utils";
 import { PreviewAttachment } from "./preview-attachment";
@@ -174,6 +174,25 @@ function PureMultimodalInput({
 
         return updatedMessages;
       });
+    },
+    onToolCall: (toolCall: ToolCall) => {
+      const messageId = generateUUID();
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: messageId,
+          role: "assistant" as const,
+          parts: [
+            {
+              type: "tool-call",
+              toolName: toolCall.toolName,
+              args: toolCall.parameters,
+              toolCallId: toolCall.invocationId,
+            },
+          ],
+          createdAt: new Date(),
+        },
+      ]);
     },
     onError: (error) => {
       toast.error(error.message);

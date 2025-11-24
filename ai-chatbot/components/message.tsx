@@ -267,6 +267,20 @@ const PurePreviewMessage = ({
               );
             }
 
+            // Generic tool call display (for voice agent tools)
+            if (type === "tool-call") {
+              const { toolCallId, toolName, args } = part as any;
+
+              return (
+                <Tool defaultOpen={true} key={toolCallId}>
+                  <ToolHeader state="output-available" type={toolName} />
+                  <ToolContent>
+                    <ToolInput input={args} />
+                  </ToolContent>
+                </Tool>
+              );
+            }
+
             return null;
           })}
 

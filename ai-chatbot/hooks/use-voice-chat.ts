@@ -4,6 +4,12 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { UltravoxSession, UltravoxSessionStatus } from "ultravox-client";
 import { getStatusMessage } from "@/lib/ai/voice";
 
+export interface ToolCall {
+  toolName: string;
+  parameters: Record<string, unknown>;
+  invocationId: string;
+}
+
 interface UseVoiceChatOptions {
   systemPrompt?: string;
   voice?: string;
@@ -11,6 +17,7 @@ interface UseVoiceChatOptions {
   temperature?: number;
   onTranscriptUpdate?: (transcript: { role: string; text: string }[]) => void;
   onStatusChange?: (status: UltravoxSessionStatus) => void;
+  onToolCall?: (toolCall: ToolCall) => void;
   onError?: (error: Error) => void;
 }
 
@@ -89,6 +96,19 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
       });
 
       session.addEventListener("transcripts", updateTranscripts);
+
+      // Listen for experimental messages (includes tool calls)
+      session.addEventListener("experimentalMessage", (event: any) => {
+        const message = event.message;
+        if (message?.type === "client_tool_invocation") {
+          const toolCall: ToolCall = {
+            toolName: message.toolName,
+            parameters: message.parameters || {},
+            invocationId: message.invocationId,
+          };
+          options.onToolCall?.(toolCall);
+        }
+      });
 
       await session.joinCall(joinUrl);
 
