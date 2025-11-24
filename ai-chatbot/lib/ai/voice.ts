@@ -29,7 +29,7 @@ export async function createUltravoxCall(config: CallConfig): Promise<{ joinUrl:
       voice: config.voice || "Mark",
       temperature: config.temperature || 0.7,
       languageHint: config.languageHint || "en",
-      selectedTools: [WEB_SEARCH_TOOL],
+      selectedTools: [WEB_SEARCH_TOOL, NYC_MAYOR_TOOL],
     }),
   });
 
@@ -106,6 +106,15 @@ export const WEB_SEARCH_TOOL = {
         required: true,
       },
     ],
+    client: {},
+  },
+};
+
+export const NYC_MAYOR_TOOL = {
+  temporaryTool: {
+    modelToolName: "getCurrentMayorOfNewYork",
+    description: "Get the current mayor of New York City.",
+    dynamicParameters: [],
     client: {},
   },
 };

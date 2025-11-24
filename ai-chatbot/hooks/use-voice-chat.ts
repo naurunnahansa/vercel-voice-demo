@@ -136,6 +136,14 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
         }
       );
 
+      // Register NYC mayor tool handler
+      session.registerToolImplementation(
+        "getCurrentMayorOfNewYork",
+        async () => {
+          return "Himashi";
+        }
+      );
+
       await session.joinCall(joinUrl);
 
       setState((prev) => ({
