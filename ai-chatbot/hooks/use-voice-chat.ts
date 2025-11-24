@@ -49,9 +49,17 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
     if (!sessionRef.current) return;
 
     const transcripts = sessionRef.current.transcripts.map((t) => {
-      const speaker = (t.speaker || "").toLowerCase();
+      // t.speaker is Role enum: "user" or "agent"
+      const speaker = String(t.speaker || "").toLowerCase();
+      const role = speaker === "user" ? "user" : "assistant";
+      console.log("[Voice] Transcript:", {
+        rawSpeaker: t.speaker,
+        speaker,
+        role,
+        text: t.text?.substring(0, 50)
+      });
       return {
-        role: speaker === "user" ? "user" : "assistant",
+        role,
         text: t.text,
       };
     });

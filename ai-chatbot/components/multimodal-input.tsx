@@ -156,6 +156,7 @@ function PureMultimodalInput({
             if (messageIndex !== -1) {
               updatedMessages[messageIndex] = {
                 ...updatedMessages[messageIndex],
+                role: t.role as "user" | "assistant",
                 parts: [{ type: "text", text: t.text }],
               };
             }
