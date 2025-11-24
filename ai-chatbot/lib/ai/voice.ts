@@ -92,20 +92,22 @@ Use the web search tool when you need current information, statistics, or to ver
 Keep responses conversational and engaging. Speak naturally without markdown or lists since this is a voice conversation.`;
 
 export const WEB_SEARCH_TOOL = {
-  name: "webSearch",
-  description: "Search the web for current information, facts, statistics, or to answer questions that require up-to-date knowledge.",
-  dynamicParameters: [
-    {
-      name: "query",
-      location: "PARAMETER_LOCATION_BODY",
-      schema: {
-        type: "string",
-        description: "The search query to look up on the web",
+  temporaryTool: {
+    modelToolName: "webSearch",
+    description: "Search the web for current information, facts, statistics, or to answer questions that require up-to-date knowledge.",
+    dynamicParameters: [
+      {
+        name: "query",
+        location: "PARAMETER_LOCATION_BODY",
+        schema: {
+          type: "string",
+          description: "The search query to look up on the web",
+        },
+        required: true,
       },
-      required: true,
-    },
-  ],
-  client: {},
+    ],
+    client: {},
+  },
 };
 
 export const VOICE_OPTIONS = [
