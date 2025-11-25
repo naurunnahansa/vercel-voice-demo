@@ -1,4 +1,4 @@
-import { UltravoxSession, UltravoxSessionStatus } from "ultravox-client";
+import Vapi from "@vapi-ai/server-sdk";
 
 export interface VoiceConfig {
   apiKey: string;
@@ -22,73 +22,84 @@ export interface CallConfig {
   messages?: ChatMessage[];
 }
 
-function formatMessagesForUltravox(messages: ChatMessage[]): Array<{ role: string; content: string }> {
+function formatMessagesForVapi(messages: ChatMessage[]): Array<{ role: "user" | "assistant" | "system"; content: string }> {
   return messages
     .map((msg) => {
       const textPart = msg.parts.find((p) => p.type === "text" && p.text);
       if (!textPart?.text) return null;
+      const role = msg.role === "user" ? "user" : msg.role === "system" ? "system" : "assistant";
       return {
-        role: msg.role === "user" ? "user" : "assistant",
+        role,
         content: textPart.text,
       };
     })
-    .filter((m): m is { role: string; content: string } => m !== null);
+    .filter((m): m is { role: "user" | "assistant" | "system"; content: string } => m !== null);
 }
 
-export async function createUltravoxCall(config: CallConfig): Promise<{ joinUrl: string; callId: string }> {
-  const initialMessages = config.messages ? formatMessagesForUltravox(config.messages) : undefined;
+export async function createVapiCall(config: CallConfig): Promise<{ joinUrl: string; callId: string }> {
+  const vapi = new Vapi(process.env.VAPI_API_KEY || "");
 
-  const response = await fetch("https://api.ultravox.ai/api/calls", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-API-Key": process.env.ULTRAVOX_API_KEY || "",
-    },
-    body: JSON.stringify({
-      systemPrompt: config.systemPrompt,
-      model: config.model || "fixie-ai/ultravox-70B",
-      voice: config.voice || "Mark",
-      temperature: config.temperature || 0.7,
-      languageHint: config.languageHint || "en",
-      selectedTools: [WEB_SEARCH_TOOL, NYC_MAYOR_TOOL],
-      ...(initialMessages && initialMessages.length > 0 && { initialMessages }),
-    }),
-  });
+  try {
+    // Create assistant configuration
+    const assistant = {
+      model: {
+        provider: "openai",
+        model: config.model || "gpt-4o",
+        temperature: config.temperature || 0.7,
+        messages: [
+          {
+            role: "system" as const,
+            content: config.systemPrompt,
+          },
+          ...(config.messages ? formatMessagesForVapi(config.messages) : []),
+        ],
+      },
+      voice: {
+        provider: "11labs",
+        voiceId: getVoiceId(config.voice || "Mark"),
+      },
+      firstMessage: "Hello! How can I help you today?",
+      serverUrl: process.env.VAPI_SERVER_URL,
+      serverUrlSecret: process.env.VAPI_SERVER_URL_SECRET,
+    };
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Failed to create Ultravox call: ${error}`);
+    // Create a call with the assistant
+    const call = await vapi.calls.create({
+      assistant,
+    });
+
+    // Extract the web call URL and call ID
+    const joinUrl = call.webCallUrl || "";
+    const callId = call.id || "";
+
+    return {
+      joinUrl,
+      callId,
+    };
+  } catch (error) {
+    console.error("Failed to create Vapi call:", error);
+    throw new Error(`Failed to create Vapi call: ${error instanceof Error ? error.message : String(error)}`);
   }
+}
 
-  const data = await response.json();
-  return {
-    joinUrl: data.joinUrl,
-    callId: data.callId,
+function getVoiceId(voiceName: string): string {
+  const voiceMap: Record<string, string> = {
+    Mark: "mark",
+    Jessica: "jessica",
+    Sarah: "sarah",
+    John: "john",
   };
+  return voiceMap[voiceName] || "mark";
 }
 
-export function createVoiceSession(): UltravoxSession {
-  return new UltravoxSession();
-}
+export async function endVapiCall(callId: string): Promise<void> {
+  const vapi = new Vapi(process.env.VAPI_API_KEY || "");
 
-export function getStatusMessage(status: UltravoxSessionStatus): string {
-  switch (status) {
-    case UltravoxSessionStatus.DISCONNECTED:
-      return "Disconnected";
-    case UltravoxSessionStatus.DISCONNECTING:
-      return "Disconnecting...";
-    case UltravoxSessionStatus.CONNECTING:
-      return "Connecting...";
-    case UltravoxSessionStatus.IDLE:
-      return "Connected - Ready";
-    case UltravoxSessionStatus.LISTENING:
-      return "Listening...";
-    case UltravoxSessionStatus.THINKING:
-      return "Thinking...";
-    case UltravoxSessionStatus.SPEAKING:
-      return "Speaking...";
-    default:
-      return "Unknown";
+  try {
+    await vapi.calls.delete(callId);
+  } catch (error) {
+    // Ignore errors for already ended calls
+    console.error("Failed to end Vapi call:", error);
   }
 }
 
@@ -113,37 +124,35 @@ Use the web search tool when you need current information, statistics, or to ver
 
 Keep responses conversational and engaging. Speak naturally without markdown or lists since this is a voice conversation.`;
 
-export const WEB_SEARCH_TOOL = {
-  temporaryTool: {
-    modelToolName: "webSearch",
-    description: "Search the web for current information, facts, statistics, or to answer questions that require up-to-date knowledge.",
-    dynamicParameters: [
-      {
-        name: "query",
-        location: "PARAMETER_LOCATION_BODY",
-        schema: {
-          type: "string",
-          description: "The search query to look up on the web",
-        },
-        required: true,
-      },
-    ],
-    client: {},
-  },
-};
-
-export const NYC_MAYOR_TOOL = {
-  temporaryTool: {
-    modelToolName: "getCurrentMayorOfNewYork",
-    description: "Get the current mayor of New York City.",
-    dynamicParameters: [],
-    client: {},
-  },
-};
-
 export const VOICE_OPTIONS = [
   { id: "Mark", name: "Mark (Male)" },
   { id: "Jessica", name: "Jessica (Female)" },
   { id: "Sarah", name: "Sarah (Female)" },
   { id: "John", name: "John (Male)" },
 ];
+
+// Status enum for Vapi
+export enum VapiStatus {
+  DISCONNECTED = "disconnected",
+  CONNECTING = "connecting",
+  CONNECTED = "connected",
+  ACTIVE = "active",
+  ENDED = "ended",
+}
+
+export function getStatusMessage(status: string): string {
+  switch (status) {
+    case "disconnected":
+      return "Disconnected";
+    case "connecting":
+      return "Connecting...";
+    case "connected":
+      return "Connected - Ready";
+    case "active":
+      return "Active";
+    case "ended":
+      return "Call Ended";
+    default:
+      return "Unknown";
+  }
+}

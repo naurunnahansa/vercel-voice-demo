@@ -1,7 +1,6 @@
 "use client";
 
 import { useVoiceChat } from "@/hooks/use-voice-chat";
-import { UltravoxSessionStatus } from "ultravox-client";
 import { Button } from "./ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { cn } from "@/lib/utils";
@@ -101,17 +100,17 @@ export function VoicePanel({ systemPrompt, voice, className, selectedModelId, on
         <div
           className={cn(
             "inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm",
-            status === UltravoxSessionStatus.SPEAKING && "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-            status === UltravoxSessionStatus.LISTENING && "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-            status === UltravoxSessionStatus.THINKING && "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
-            status === UltravoxSessionStatus.CONNECTING && "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
-            status === UltravoxSessionStatus.IDLE && "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
-            status === UltravoxSessionStatus.DISCONNECTED && "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"
+            status === "listening" && "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+            status === "thinking" && "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+            status === "connected" && "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+            status === "connecting" && "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
+            status === "active" && "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+            status === "disconnected" && "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"
           )}
         >
-          {(status === UltravoxSessionStatus.SPEAKING ||
-            status === UltravoxSessionStatus.LISTENING ||
-            status === UltravoxSessionStatus.THINKING) && (
+          {(status === "listening" ||
+            status === "thinking" ||
+            status === "active") && (
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-current opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-current"></span>

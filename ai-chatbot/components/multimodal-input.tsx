@@ -44,7 +44,6 @@ import {
 } from "./icons";
 import { Mic, MicOff, Phone, PhoneOff } from "lucide-react";
 import { useVoiceChat, type ToolCall } from "@/hooks/use-voice-chat";
-import { UltravoxSessionStatus } from "ultravox-client";
 import { generateUUID } from "@/lib/utils";
 import { PreviewAttachment } from "./preview-attachment";
 import { SuggestedActions } from "./suggested-actions";
@@ -503,10 +502,10 @@ function PureMultimodalInput({
                   <PhoneOff size={16} className="text-destructive" />
                 </Button>
                 <span className="text-xs text-muted-foreground px-2">
-                  {voiceStatus === UltravoxSessionStatus.LISTENING && "Listening..."}
-                  {voiceStatus === UltravoxSessionStatus.THINKING && "Thinking..."}
-                  {voiceStatus === UltravoxSessionStatus.SPEAKING && "Speaking..."}
-                  {voiceStatus === UltravoxSessionStatus.CONNECTING && "Connecting..."}
+                  {voiceStatus === "listening" && "Listening..."}
+                  {voiceStatus === "thinking" && "Thinking..."}
+                  {voiceStatus === "active" && "Speaking..."}
+                  {voiceStatus === "connecting" && "Connecting..."}
                 </span>
               </>
             ) : (

@@ -1,5 +1,5 @@
 import { auth } from "@/app/(auth)/auth";
-import { createUltravoxCall, DEFAULT_SYSTEM_PROMPT } from "@/lib/ai/voice";
+import { createVapiCall, endVapiCall, DEFAULT_SYSTEM_PROMPT } from "@/lib/ai/voice";
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -12,10 +12,10 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { systemPrompt, voice, model, temperature, messages } = body;
 
-    const callData = await createUltravoxCall({
+    const callData = await createVapiCall({
       systemPrompt: systemPrompt || DEFAULT_SYSTEM_PROMPT,
       voice: voice || "Mark",
-      model: model || "fixie-ai/ultravox-70B",
+      model: model || "gpt-4o",
       temperature: temperature || 0.7,
       messages,
     });
@@ -48,18 +48,7 @@ export async function DELETE(request: Request) {
       return new Response("Call ID required", { status: 400 });
     }
 
-    const response = await fetch(`https://api.ultravox.ai/api/calls/${callId}`, {
-      method: "DELETE",
-      headers: {
-        "X-API-Key": process.env.ULTRAVOX_API_KEY || "",
-      },
-    });
-
-    // Accept success, not found (already ended), gone (expired), or too early as valid responses
-    if (!response.ok && ![404, 410, 425].includes(response.status)) {
-      console.error(`Failed to end call ${callId}: ${response.status}`);
-      throw new Error("Failed to end call");
-    }
+    await endVapiCall(callId);
 
     return new Response("Call ended", { status: 200 });
   } catch (error) {

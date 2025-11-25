@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import { UltravoxSession, UltravoxSessionStatus } from "ultravox-client";
-import { getStatusMessage } from "@/lib/ai/voice";
+import Vapi from "@vapi-ai/web";
 
 export interface ToolCall {
   toolName: string;
@@ -22,7 +21,7 @@ interface UseVoiceChatOptions {
   temperature?: number;
   messages?: ChatMessage[];
   onTranscriptUpdate?: (transcript: { role: string; text: string }[]) => void;
-  onStatusChange?: (status: UltravoxSessionStatus) => void;
+  onStatusChange?: (status: string) => void;
   onToolCall?: (toolCall: ToolCall) => void;
   onError?: (error: Error) => void;
 }
@@ -30,7 +29,7 @@ interface UseVoiceChatOptions {
 interface VoiceChatState {
   isConnected: boolean;
   isConnecting: boolean;
-  status: UltravoxSessionStatus;
+  status: string;
   statusMessage: string;
   transcripts: { role: string; text: string }[];
   callId: string | null;
@@ -39,11 +38,11 @@ interface VoiceChatState {
 }
 
 export function useVoiceChat(options: UseVoiceChatOptions = {}) {
-  const sessionRef = useRef<UltravoxSession | null>(null);
+  const vapiRef = useRef<Vapi | null>(null);
   const [state, setState] = useState<VoiceChatState>({
     isConnected: false,
     isConnecting: false,
-    status: UltravoxSessionStatus.DISCONNECTED,
+    status: "disconnected",
     statusMessage: "Disconnected",
     transcripts: [],
     callId: null,
@@ -51,27 +50,13 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
     isMuted: false,
   });
 
-  const updateTranscripts = useCallback(() => {
-    if (!sessionRef.current) return;
-
-    const transcripts = sessionRef.current.transcripts.map((t) => {
-      // t.speaker is Role enum: "user" or "agent"
-      const speaker = String(t.speaker || "").toLowerCase();
-      const role = speaker === "user" ? "user" : "assistant";
-      console.log("[Voice] Transcript:", {
-        rawSpeaker: t.speaker,
-        speaker,
-        role,
-        text: t.text?.substring(0, 50)
-      });
-      return {
-        role,
-        text: t.text,
-      };
-    });
-
-    setState((prev) => ({ ...prev, transcripts }));
-    options.onTranscriptUpdate?.(transcripts);
+  const updateStatus = useCallback((status: string, message: string) => {
+    setState((prev) => ({
+      ...prev,
+      status,
+      statusMessage: message,
+    }));
+    options.onStatusChange?.(status);
   }, [options]);
 
   const startCall = useCallback(async () => {
@@ -80,6 +65,7 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
     setState((prev) => ({ ...prev, isConnecting: true, error: null }));
 
     try {
+      // Get the join URL from the backend
       const response = await fetch("/api/voice", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -98,78 +84,73 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
 
       const { joinUrl, callId } = await response.json();
 
-      const session = new UltravoxSession();
-      sessionRef.current = session;
+      // Initialize Vapi client
+      const vapi = new Vapi(process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY || "");
+      vapiRef.current = vapi;
 
-      session.addEventListener("status", () => {
-        const status = session.status;
+      // Set up event listeners
+      vapi.on("call-start", () => {
+        updateStatus("connected", "Connected - Ready");
         setState((prev) => ({
           ...prev,
-          status,
-          statusMessage: getStatusMessage(status),
-          isConnected: status !== UltravoxSessionStatus.DISCONNECTED &&
-                       status !== UltravoxSessionStatus.DISCONNECTING,
+          isConnecting: false,
+          isConnected: true,
+          callId,
         }));
-        options.onStatusChange?.(status);
       });
 
-      session.addEventListener("transcripts", updateTranscripts);
+      vapi.on("call-end", () => {
+        updateStatus("disconnected", "Disconnected");
+        setState((prev) => ({
+          ...prev,
+          isConnected: false,
+          callId: null,
+        }));
+      });
 
-      // Listen for experimental messages (includes tool calls)
-      session.addEventListener("experimentalMessage", (event: any) => {
-        const message = event.message;
-        if (message?.type === "client_tool_invocation") {
+      vapi.on("speech-start", () => {
+        updateStatus("listening", "Listening...");
+      });
+
+      vapi.on("speech-end", () => {
+        updateStatus("thinking", "Thinking...");
+      });
+
+      vapi.on("message", (message: any) => {
+        if (message.type === "transcript") {
+          const role = message.role === "user" ? "user" : "assistant";
+          const text = message.transcript || message.content || "";
+
+          setState((prev) => {
+            const newTranscripts = [
+              ...prev.transcripts,
+              { role, text },
+            ];
+            options.onTranscriptUpdate?.(newTranscripts);
+            return { ...prev, transcripts: newTranscripts };
+          });
+        }
+
+        if (message.type === "function-call") {
           const toolCall: ToolCall = {
-            toolName: message.toolName,
-            parameters: message.parameters || {},
-            invocationId: message.invocationId,
+            toolName: message.functionCall?.name || "",
+            parameters: message.functionCall?.parameters || {},
+            invocationId: message.functionCall?.id || "",
           };
           options.onToolCall?.(toolCall);
         }
       });
 
-      // Register web search tool handler
-      session.registerToolImplementation(
-        "webSearch",
-        async (parameters: Record<string, unknown>) => {
-          const query = parameters.query as string;
+      vapi.on("error", (error: any) => {
+        console.error("Vapi error:", error);
+        const errorMessage = error?.message || "Voice call error";
+        setState((prev) => ({ ...prev, error: errorMessage }));
+        options.onError?.(new Error(errorMessage));
+      });
 
-          try {
-            const response = await fetch("/api/search", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ query }),
-            });
+      // Start the call with the web call URL
+      await vapi.start(joinUrl);
 
-            if (!response.ok) {
-              return "Search failed. Please try again.";
-            }
-
-            const { summary } = await response.json();
-            return summary || "No results found.";
-          } catch (error) {
-            console.error("Web search error:", error);
-            return "Search failed due to an error.";
-          }
-        }
-      );
-
-      // Register NYC mayor tool handler
-      session.registerToolImplementation(
-        "getCurrentMayorOfNewYork",
-        async () => {
-          return "Himashi";
-        }
-      );
-
-      await session.joinCall(joinUrl);
-
-      setState((prev) => ({
-        ...prev,
-        isConnecting: false,
-        isConnected: true,
-        callId,
-      }));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Failed to start call";
       setState((prev) => ({
@@ -179,13 +160,13 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
       }));
       options.onError?.(error instanceof Error ? error : new Error(errorMessage));
     }
-  }, [state.isConnecting, state.isConnected, options, updateTranscripts]);
+  }, [state.isConnecting, state.isConnected, options, updateStatus]);
 
   const endCall = useCallback(async () => {
-    if (!sessionRef.current) return;
+    if (!vapiRef.current) return;
 
     try {
-      sessionRef.current.leaveCall();
+      vapiRef.current.stop();
 
       if (state.callId) {
         await fetch(`/api/voice?callId=${state.callId}`, {
@@ -195,11 +176,11 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
     } catch (error) {
       console.error("Error ending call:", error);
     } finally {
-      sessionRef.current = null;
+      vapiRef.current = null;
       setState({
         isConnected: false,
         isConnecting: false,
-        status: UltravoxSessionStatus.DISCONNECTED,
+        status: "disconnected",
         statusMessage: "Disconnected",
         transcripts: [],
         callId: null,
@@ -210,22 +191,22 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
   }, [state.callId]);
 
   const toggleMute = useCallback(() => {
-    if (!sessionRef.current) return;
+    if (!vapiRef.current) return;
 
-    const currentlyMuted = sessionRef.current.isMicMuted;
+    const currentlyMuted = vapiRef.current.isMuted();
     if (currentlyMuted) {
-      sessionRef.current.unmuteMic();
+      vapiRef.current.setMuted(false);
     } else {
-      sessionRef.current.muteMic();
+      vapiRef.current.setMuted(true);
     }
     setState((prev) => ({ ...prev, isMuted: !currentlyMuted }));
   }, []);
 
   useEffect(() => {
     return () => {
-      if (sessionRef.current) {
-        sessionRef.current.leaveCall();
-        sessionRef.current = null;
+      if (vapiRef.current) {
+        vapiRef.current.stop();
+        vapiRef.current = null;
       }
     };
   }, []);
