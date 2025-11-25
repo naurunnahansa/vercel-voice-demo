@@ -191,6 +191,7 @@ function PureMultimodalInput({
             body: JSON.stringify({
               chatId,
               messages: messagesToSave,
+              visibility: selectedVisibilityType,
             }),
           });
         } catch (error) {

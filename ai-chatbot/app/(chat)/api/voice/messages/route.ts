@@ -1,5 +1,5 @@
 import { auth } from "@/app/(auth)/auth";
-import { db } from "@/lib/db/queries";
+import { db, getChatById, saveChat } from "@/lib/db/queries";
 import { message } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 
@@ -12,10 +12,25 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { chatId, messages } = body;
+    const { chatId, messages, visibility = "private" } = body;
 
     if (!chatId || !messages || !Array.isArray(messages)) {
       return new Response("Invalid request body", { status: 400 });
+    }
+
+    // Check if chat exists, create it if not
+    const existingChat = await getChatById({ id: chatId });
+    if (!existingChat) {
+      // Create the chat with a default title from the first message
+      const firstMessage = messages[0];
+      const title = firstMessage?.text?.slice(0, 100) || "Voice conversation";
+
+      await saveChat({
+        id: chatId,
+        userId: session.user.id,
+        title,
+        visibility,
+      });
     }
 
     // Use upsert pattern: delete existing messages and insert new ones
