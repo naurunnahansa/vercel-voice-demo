@@ -151,10 +151,21 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
       });
 
       vapi.on("error", (error: any) => {
-        console.error("Vapi error:", error);
-        const errorMessage = error?.message || error?.error?.message || "Voice call error";
-        setState((prev) => ({ ...prev, error: errorMessage }));
-        options.onError?.(new Error(errorMessage));
+        // Ignore "meeting ended" errors - these are normal call termination events
+        const errorMessage = error?.message || error?.error?.message || "";
+        if (errorMessage.toLowerCase().includes("meeting ended") ||
+            errorMessage.toLowerCase().includes("meeting has ended") ||
+            errorMessage.toLowerCase().includes("ejection")) {
+          // This is a normal call end, not an error
+          return;
+        }
+
+        // Only log and report actual errors
+        if (errorMessage) {
+          console.error("Vapi error:", error);
+          setState((prev) => ({ ...prev, error: errorMessage }));
+          options.onError?.(new Error(errorMessage));
+        }
       });
 
       // Format messages for Vapi if provided
