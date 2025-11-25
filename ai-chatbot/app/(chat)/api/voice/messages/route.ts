@@ -1,7 +1,6 @@
 import { auth } from "@/app/(auth)/auth";
-import { db, getChatById, saveChat } from "@/lib/db/queries";
-import { message } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { db, getChatById } from "@/lib/db/queries";
+import { message, chat } from "@/lib/db/schema";
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -18,48 +17,49 @@ export async function POST(request: Request) {
       return new Response("Invalid request body", { status: 400 });
     }
 
-    // Check if chat exists, create it if not
+    // Check if chat exists, create it if not (with conflict handling)
     const existingChat = await getChatById({ id: chatId });
     if (!existingChat) {
       // Create the chat with a default title from the first message
       const firstMessage = messages[0];
       const title = firstMessage?.text?.slice(0, 100) || "Voice conversation";
 
-      await saveChat({
-        id: chatId,
-        userId: session.user.id,
-        title,
-        visibility,
-      });
+      try {
+        // Use onConflictDoNothing to handle race conditions
+        await db.insert(chat).values({
+          id: chatId,
+          createdAt: new Date(),
+          userId: session.user.id,
+          title,
+          visibility,
+        }).onConflictDoNothing();
+      } catch (e) {
+        // Ignore duplicate key errors - another request created the chat
+        console.log("Chat may already exist, continuing...");
+      }
     }
 
-    // Use upsert pattern: delete existing messages and insert new ones
-    const messageIds = messages.map((msg: { id: string }) => msg.id);
+    if (messages.length > 0) {
+      // Process each message individually with upsert logic
+      for (const msg of messages) {
+        const dbMessage = {
+          id: msg.id,
+          chatId,
+          role: msg.role,
+          parts: [{ type: "text", text: msg.text }],
+          attachments: [],
+          createdAt: new Date(msg.createdAt),
+        };
 
-    if (messageIds.length > 0) {
-      // Delete existing messages with these IDs
-      await Promise.all(
-        messageIds.map((msgId) =>
-          db.delete(message).where(eq(message.id, msgId))
-        )
-      );
-
-      // Insert all messages
-      const dbMessages = messages.map((msg: {
-        id: string;
-        role: string;
-        text: string;
-        createdAt: string;
-      }) => ({
-        id: msg.id,
-        chatId,
-        role: msg.role,
-        parts: [{ type: "text", text: msg.text }],
-        attachments: [],
-        createdAt: new Date(msg.createdAt),
-      }));
-
-      await db.insert(message).values(dbMessages);
+        // Try to insert, on conflict update the message
+        await db.insert(message).values(dbMessage).onConflictDoUpdate({
+          target: message.id,
+          set: {
+            role: dbMessage.role,
+            parts: dbMessage.parts,
+          },
+        });
+      }
     }
 
     return Response.json({ success: true });
