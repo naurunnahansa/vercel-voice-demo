@@ -1,5 +1,5 @@
 import { auth } from "@/app/(auth)/auth";
-import { createUltravoxCall, DEFAULT_SYSTEM_PROMPT } from "@/lib/ai/voice";
+import { createVogentDial } from "@/lib/ai/voice";
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -10,19 +10,22 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { systemPrompt, voice, model, temperature, messages } = body;
+    const { messages } = body;
 
-    const callData = await createUltravoxCall({
-      systemPrompt: systemPrompt || DEFAULT_SYSTEM_PROMPT,
-      voice: voice || "Mark",
-      model: model || "fixie-ai/ultravox-70B",
-      temperature: temperature || 0.7,
+    const callAgentId = process.env.VOGENT_CALL_AGENT_ID;
+    if (!callAgentId) {
+      throw new Error("VOGENT_CALL_AGENT_ID is not configured");
+    }
+
+    const dialData = await createVogentDial({
+      callAgentId,
       messages,
     });
 
     return Response.json({
-      joinUrl: callData.joinUrl,
-      callId: callData.callId,
+      sessionId: dialData.sessionId,
+      dialId: dialData.dialId,
+      dialToken: dialData.dialToken,
     });
   } catch (error) {
     console.error("Failed to create voice call:", error);
@@ -42,24 +45,15 @@ export async function DELETE(request: Request) {
 
   try {
     const { searchParams } = new URL(request.url);
-    const callId = searchParams.get("callId");
+    const dialId = searchParams.get("dialId");
 
-    if (!callId) {
-      return new Response("Call ID required", { status: 400 });
+    if (!dialId) {
+      return new Response("Dial ID required", { status: 400 });
     }
 
-    const response = await fetch(`https://api.ultravox.ai/api/calls/${callId}`, {
-      method: "DELETE",
-      headers: {
-        "X-API-Key": process.env.ULTRAVOX_API_KEY || "",
-      },
-    });
-
-    // Accept success, not found (already ended), gone (expired), or too early as valid responses
-    if (!response.ok && ![404, 410, 425].includes(response.status)) {
-      console.error(`Failed to end call ${callId}: ${response.status}`);
-      throw new Error("Failed to end call");
-    }
+    // Vogent calls typically end when client calls hangup()
+    // This endpoint is here for cleanup but may not be necessary
+    // as the client SDK handles the hangup
 
     return new Response("Call ended", { status: 200 });
   } catch (error) {

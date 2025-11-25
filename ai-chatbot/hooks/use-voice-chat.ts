@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import { UltravoxSession, UltravoxSessionStatus } from "ultravox-client";
-import { getStatusMessage } from "@/lib/ai/voice";
+import { VogentCall } from "@vogent/vogent-web-client";
+import { getStatusMessage, type VogentStatus } from "@/lib/ai/voice";
 
 export interface ToolCall {
   toolName: string;
@@ -30,37 +30,34 @@ interface UseVoiceChatOptions {
 interface VoiceChatState {
   isConnected: boolean;
   isConnecting: boolean;
-  status: UltravoxSessionStatus;
+  status: VogentStatus | "disconnected";
   statusMessage: string;
   transcripts: { role: string; text: string }[];
-  callId: string | null;
+  dialId: string | null;
   error: string | null;
-  isMuted: boolean;
+  isPaused: boolean;
 }
 
 export function useVoiceChat(options: UseVoiceChatOptions = {}) {
-  const sessionRef = useRef<UltravoxSession | null>(null);
+  const callRef = useRef<VogentCall | null>(null);
+  const transcriptUnsubscribeRef = useRef<(() => void) | null>(null);
   const [state, setState] = useState<VoiceChatState>({
     isConnected: false,
     isConnecting: false,
-    status: UltravoxSessionStatus.DISCONNECTED,
+    status: "disconnected",
     statusMessage: "Disconnected",
     transcripts: [],
-    callId: null,
+    dialId: null,
     error: null,
-    isMuted: false,
+    isPaused: false,
   });
 
-  const updateTranscripts = useCallback(() => {
-    if (!sessionRef.current) return;
-
-    const transcripts = sessionRef.current.transcripts.map((t) => {
-      // t.speaker is Role enum: "user" or "agent"
-      const speaker = String(t.speaker || "").toLowerCase();
-      const role = speaker === "user" ? "user" : "assistant";
+  // Vogent uses a callback pattern for transcripts
+  const handleTranscriptUpdate = useCallback((transcript: Array<{text: string; speaker: string}>) => {
+    const formattedTranscripts = transcript.map((t) => {
+      const role = t.speaker === "user" ? "user" : "assistant";
       console.log("[Voice] Transcript:", {
         rawSpeaker: t.speaker,
-        speaker,
         role,
         text: t.text?.substring(0, 50)
       });
@@ -70,8 +67,8 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
       };
     });
 
-    setState((prev) => ({ ...prev, transcripts }));
-    options.onTranscriptUpdate?.(transcripts);
+    setState((prev) => ({ ...prev, transcripts: formattedTranscripts }));
+    options.onTranscriptUpdate?.(formattedTranscripts);
   }, [options]);
 
   const startCall = useCallback(async () => {
@@ -80,14 +77,11 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
     setState((prev) => ({ ...prev, isConnecting: true, error: null }));
 
     try {
+      // Step 1: Create a dial via the API
       const response = await fetch("/api/voice", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          systemPrompt: options.systemPrompt,
-          voice: options.voice,
-          model: options.model,
-          temperature: options.temperature,
           messages: options.messages,
         }),
       });
@@ -96,79 +90,44 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
         throw new Error(await response.text());
       }
 
-      const { joinUrl, callId } = await response.json();
+      const { sessionId, dialId, dialToken } = await response.json();
 
-      const session = new UltravoxSession();
-      sessionRef.current = session;
+      // Step 2: Create VogentCall instance
+      const call = new VogentCall({
+        sessionId,
+        dialId,
+        token: dialToken,
+      });
+      callRef.current = call;
 
-      session.addEventListener("status", () => {
-        const status = session.status;
+      // Step 3: Set up status listener
+      call.on("status", (status: VogentStatus) => {
+        console.log("[Voice] Status changed:", status);
         setState((prev) => ({
           ...prev,
           status,
           statusMessage: getStatusMessage(status),
-          isConnected: status !== UltravoxSessionStatus.DISCONNECTED &&
-                       status !== UltravoxSessionStatus.DISCONNECTING,
+          isConnected: status === "connected",
         }));
-        options.onStatusChange?.(status);
+        options.onStatusChange?.(status as any);
       });
 
-      session.addEventListener("transcripts", updateTranscripts);
+      // Step 4: Set up transcript monitoring
+      const unsubscribe = call.monitorTranscript(handleTranscriptUpdate);
+      transcriptUnsubscribeRef.current = unsubscribe;
 
-      // Listen for experimental messages (includes tool calls)
-      session.addEventListener("experimentalMessage", (event: any) => {
-        const message = event.message;
-        if (message?.type === "client_tool_invocation") {
-          const toolCall: ToolCall = {
-            toolName: message.toolName,
-            parameters: message.parameters || {},
-            invocationId: message.invocationId,
-          };
-          options.onToolCall?.(toolCall);
-        }
-      });
+      // Step 5: Start the call
+      await call.start();
 
-      // Register web search tool handler
-      session.registerToolImplementation(
-        "webSearch",
-        async (parameters: Record<string, unknown>) => {
-          const query = parameters.query as string;
-
-          try {
-            const response = await fetch("/api/search", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ query }),
-            });
-
-            if (!response.ok) {
-              return "Search failed. Please try again.";
-            }
-
-            const { summary } = await response.json();
-            return summary || "No results found.";
-          } catch (error) {
-            console.error("Web search error:", error);
-            return "Search failed due to an error.";
-          }
-        }
-      );
-
-      // Register NYC mayor tool handler
-      session.registerToolImplementation(
-        "getCurrentMayorOfNewYork",
-        async () => {
-          return "Himashi";
-        }
-      );
-
-      await session.joinCall(joinUrl);
+      // Step 6: Connect audio
+      await call.connectAudio();
 
       setState((prev) => ({
         ...prev,
         isConnecting: false,
         isConnected: true,
-        callId,
+        dialId,
+        status: "connected",
       }));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Failed to start call";
@@ -179,61 +138,74 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
       }));
       options.onError?.(error instanceof Error ? error : new Error(errorMessage));
     }
-  }, [state.isConnecting, state.isConnected, options, updateTranscripts]);
+  }, [state.isConnecting, state.isConnected, options, handleTranscriptUpdate]);
 
   const endCall = useCallback(async () => {
-    if (!sessionRef.current) return;
+    if (!callRef.current) return;
 
     try {
-      sessionRef.current.leaveCall();
+      // Unsubscribe from transcript updates
+      if (transcriptUnsubscribeRef.current) {
+        transcriptUnsubscribeRef.current();
+        transcriptUnsubscribeRef.current = null;
+      }
 
-      if (state.callId) {
-        await fetch(`/api/voice?callId=${state.callId}`, {
+      // Hangup the call
+      await callRef.current.hangup();
+
+      // Optionally notify server (Vogent handles cleanup automatically)
+      if (state.dialId) {
+        await fetch(`/api/voice?dialId=${state.dialId}`, {
           method: "DELETE",
         });
       }
     } catch (error) {
       console.error("Error ending call:", error);
     } finally {
-      sessionRef.current = null;
+      callRef.current = null;
       setState({
         isConnected: false,
         isConnecting: false,
-        status: UltravoxSessionStatus.DISCONNECTED,
+        status: "disconnected",
         statusMessage: "Disconnected",
         transcripts: [],
-        callId: null,
+        dialId: null,
         error: null,
-        isMuted: false,
+        isPaused: false,
       });
     }
-  }, [state.callId]);
+  }, [state.dialId]);
 
-  const toggleMute = useCallback(() => {
-    if (!sessionRef.current) return;
+  const togglePause = useCallback(async () => {
+    if (!callRef.current) return;
 
-    const currentlyMuted = sessionRef.current.isMicMuted;
-    if (currentlyMuted) {
-      sessionRef.current.unmuteMic();
-    } else {
-      sessionRef.current.muteMic();
+    const newPausedState = !state.isPaused;
+    try {
+      await callRef.current.setPaused(newPausedState);
+      setState((prev) => ({ ...prev, isPaused: newPausedState }));
+    } catch (error) {
+      console.error("Error toggling pause:", error);
     }
-    setState((prev) => ({ ...prev, isMuted: !currentlyMuted }));
-  }, []);
+  }, [state.isPaused]);
 
   useEffect(() => {
     return () => {
-      if (sessionRef.current) {
-        sessionRef.current.leaveCall();
-        sessionRef.current = null;
+      if (callRef.current) {
+        callRef.current.hangup();
+        callRef.current = null;
+      }
+      if (transcriptUnsubscribeRef.current) {
+        transcriptUnsubscribeRef.current();
+        transcriptUnsubscribeRef.current = null;
       }
     };
   }, []);
 
   return {
     ...state,
+    isMuted: state.isPaused, // Expose isPaused as isMuted for compatibility
     startCall,
     endCall,
-    toggleMute,
+    toggleMute: togglePause, // Renamed but keeping interface for compatibility
   };
 }
