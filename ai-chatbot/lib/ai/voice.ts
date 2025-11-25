@@ -8,15 +8,36 @@ export interface VoiceConfig {
   model?: string;
 }
 
+interface ChatMessage {
+  role: string;
+  parts: Array<{ type: string; text?: string; [key: string]: unknown }>;
+}
+
 export interface CallConfig {
   systemPrompt: string;
   model?: string;
   voice?: string;
   temperature?: number;
   languageHint?: string;
+  messages?: ChatMessage[];
+}
+
+function formatMessagesForUltravox(messages: ChatMessage[]): Array<{ role: string; content: string }> {
+  return messages
+    .map((msg) => {
+      const textPart = msg.parts.find((p) => p.type === "text" && p.text);
+      if (!textPart?.text) return null;
+      return {
+        role: msg.role === "user" ? "user" : "assistant",
+        content: textPart.text,
+      };
+    })
+    .filter((m): m is { role: string; content: string } => m !== null);
 }
 
 export async function createUltravoxCall(config: CallConfig): Promise<{ joinUrl: string; callId: string }> {
+  const initialMessages = config.messages ? formatMessagesForUltravox(config.messages) : undefined;
+
   const response = await fetch("https://api.ultravox.ai/api/calls", {
     method: "POST",
     headers: {
@@ -30,6 +51,7 @@ export async function createUltravoxCall(config: CallConfig): Promise<{ joinUrl:
       temperature: config.temperature || 0.7,
       languageHint: config.languageHint || "en",
       selectedTools: [WEB_SEARCH_TOOL, NYC_MAYOR_TOOL],
+      ...(initialMessages && initialMessages.length > 0 && { initialMessages }),
     }),
   });
 

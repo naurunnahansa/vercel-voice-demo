@@ -10,13 +10,14 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { systemPrompt, voice, model, temperature } = body;
+    const { systemPrompt, voice, model, temperature, messages } = body;
 
     const callData = await createUltravoxCall({
       systemPrompt: systemPrompt || DEFAULT_SYSTEM_PROMPT,
       voice: voice || "Mark",
       model: model || "fixie-ai/ultravox-70B",
       temperature: temperature || 0.7,
+      messages,
     });
 
     return Response.json({

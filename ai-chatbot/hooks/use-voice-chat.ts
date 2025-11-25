@@ -10,11 +10,17 @@ export interface ToolCall {
   invocationId: string;
 }
 
+interface ChatMessage {
+  role: string;
+  parts: Array<{ type: string; text?: string; [key: string]: unknown }>;
+}
+
 interface UseVoiceChatOptions {
   systemPrompt?: string;
   voice?: string;
   model?: string;
   temperature?: number;
+  messages?: ChatMessage[];
   onTranscriptUpdate?: (transcript: { role: string; text: string }[]) => void;
   onStatusChange?: (status: UltravoxSessionStatus) => void;
   onToolCall?: (toolCall: ToolCall) => void;
@@ -82,6 +88,7 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
           voice: options.voice,
           model: options.model,
           temperature: options.temperature,
+          messages: options.messages,
         }),
       });
 
@@ -197,6 +204,7 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
         transcripts: [],
         callId: null,
         error: null,
+        isMuted: false,
       });
     }
   }, [state.callId]);

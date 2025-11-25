@@ -144,7 +144,8 @@ function PureMultimodalInput({
     endCall,
     toggleMute,
   } = useVoiceChat({
-    onTranscriptUpdate: (newTranscripts) => {
+    messages,
+    onTranscriptUpdate: async (newTranscripts) => {
       setMessages((prevMessages) => {
         const updatedMessages = [...prevMessages];
 
@@ -175,6 +176,29 @@ function PureMultimodalInput({
 
         return updatedMessages;
       });
+
+      // Save to database immediately
+      if (newTranscripts.length > 0 && transcriptMessageIdsRef.current.length > 0) {
+        try {
+          const messagesToSave = newTranscripts.map((t, index) => ({
+            id: transcriptMessageIdsRef.current[index],
+            role: t.role,
+            text: t.text,
+            createdAt: new Date().toISOString(),
+          }));
+
+          await fetch("/api/voice/messages", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chatId,
+              messages: messagesToSave,
+            }),
+          });
+        } catch (error) {
+          console.error("Failed to save voice transcripts:", error);
+        }
+      }
     },
     onToolCall: (toolCall: ToolCall) => {
       const messageId = generateUUID();
