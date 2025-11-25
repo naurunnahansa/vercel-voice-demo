@@ -1,5 +1,3 @@
-import Vapi from "@vapi-ai/server-sdk";
-
 export interface VoiceConfig {
   apiKey: string;
   systemPrompt?: string;
@@ -37,8 +35,6 @@ function formatMessagesForVapi(messages: ChatMessage[]): Array<{ role: "user" | 
 }
 
 export async function createVapiCall(config: CallConfig): Promise<{ joinUrl: string; callId: string }> {
-  const vapi = new Vapi(process.env.VAPI_API_KEY || "");
-
   try {
     // Create assistant configuration
     const assistant = {
@@ -59,22 +55,34 @@ export async function createVapiCall(config: CallConfig): Promise<{ joinUrl: str
         voiceId: getVoiceId(config.voice || "Mark"),
       },
       firstMessage: "Hello! How can I help you today?",
-      serverUrl: process.env.VAPI_SERVER_URL,
-      serverUrlSecret: process.env.VAPI_SERVER_URL_SECRET,
+      ...(process.env.VAPI_SERVER_URL && {
+        serverUrl: process.env.VAPI_SERVER_URL,
+        serverUrlSecret: process.env.VAPI_SERVER_URL_SECRET,
+      }),
     };
 
-    // Create a call with the assistant
-    const call = await vapi.calls.create({
-      assistant,
+    // Create a call with the assistant using REST API
+    const response = await fetch("https://api.vapi.ai/call", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.VAPI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        assistant,
+      }),
     });
 
-    // Extract the web call URL and call ID
-    const joinUrl = call.webCallUrl || "";
-    const callId = call.id || "";
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to create Vapi call: ${error}`);
+    }
+
+    const data = await response.json();
 
     return {
-      joinUrl,
-      callId,
+      joinUrl: data.webCallUrl || "",
+      callId: data.id || "",
     };
   } catch (error) {
     console.error("Failed to create Vapi call:", error);
@@ -93,10 +101,17 @@ function getVoiceId(voiceName: string): string {
 }
 
 export async function endVapiCall(callId: string): Promise<void> {
-  const vapi = new Vapi(process.env.VAPI_API_KEY || "");
-
   try {
-    await vapi.calls.delete(callId);
+    const response = await fetch(`https://api.vapi.ai/call/${callId}`, {
+      method: "DELETE",
+      headers: {
+        "Authorization": `Bearer ${process.env.VAPI_API_KEY}`,
+      },
+    });
+
+    if (!response.ok && response.status !== 404) {
+      console.error(`Failed to end Vapi call: ${response.status}`);
+    }
   } catch (error) {
     // Ignore errors for already ended calls
     console.error("Failed to end Vapi call:", error);

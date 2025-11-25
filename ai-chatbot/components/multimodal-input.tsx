@@ -168,8 +168,7 @@ function PureMultimodalInput({
               id: messageId,
               role: t.role as "user" | "assistant",
               parts: [{ type: "text", text: t.text }],
-              createdAt: new Date(),
-            });
+            } as any);
           }
         });
 
@@ -214,8 +213,7 @@ function PureMultimodalInput({
               toolCallId: toolCall.invocationId,
             },
           ],
-          createdAt: new Date(),
-        },
+        } as any,
       ]);
     },
     onError: (error) => {
