@@ -62,11 +62,11 @@ export async function createVapiCall(config: CallConfig): Promise<{ joinUrl: str
     };
 
     // Create a web call with the assistant using REST API
-    // Note: Web calls use the public key, not the private key
+    // Server-side API calls must use the private API key
     const response = await fetch("https://api.vapi.ai/call/web", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY}`,
+        "Authorization": `Bearer ${process.env.VAPI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({

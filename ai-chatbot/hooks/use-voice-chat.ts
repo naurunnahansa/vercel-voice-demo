@@ -3,6 +3,16 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import Vapi from "@vapi-ai/web";
 
+function getVoiceId(voiceName: string): string {
+  const voiceMap: Record<string, string> = {
+    Mark: "mark",
+    Jessica: "jessica",
+    Sarah: "sarah",
+    John: "john",
+  };
+  return voiceMap[voiceName] || "mark";
+}
+
 export interface ToolCall {
   toolName: string;
   parameters: Record<string, unknown>;
@@ -65,25 +75,6 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
     setState((prev) => ({ ...prev, isConnecting: true, error: null }));
 
     try {
-      // Get the join URL from the backend
-      const response = await fetch("/api/voice", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemPrompt: options.systemPrompt,
-          voice: options.voice,
-          model: options.model,
-          temperature: options.temperature,
-          messages: options.messages,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-
-      const { joinUrl, callId } = await response.json();
-
       // Initialize Vapi client
       const vapi = new Vapi(process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY || "");
       vapiRef.current = vapi;
@@ -95,7 +86,6 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
           ...prev,
           isConnecting: false,
           isConnected: true,
-          callId,
         }));
       });
 
@@ -118,15 +108,31 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
 
       vapi.on("message", (message: any) => {
         if (message.type === "transcript") {
+          // Only process final transcripts, ignore partial ones
+          // Vapi sends partial transcripts as speech is being recognized,
+          // and a final transcript when the utterance is complete
+          if (message.transcriptType !== "final") {
+            return;
+          }
+
           const role = message.role === "user" ? "user" : "assistant";
           const text = message.transcript || message.content || "";
+
+          // Skip empty transcripts
+          if (!text.trim()) {
+            return;
+          }
 
           setState((prev) => {
             const newTranscripts = [
               ...prev.transcripts,
               { role, text },
             ];
-            options.onTranscriptUpdate?.(newTranscripts);
+            // Call callback outside of setState to avoid setState-during-render errors
+            // Use setTimeout to defer the callback to the next tick
+            setTimeout(() => {
+              options.onTranscriptUpdate?.(newTranscripts);
+            }, 0);
             return { ...prev, transcripts: newTranscripts };
           });
         }
@@ -137,19 +143,38 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
             parameters: message.functionCall?.parameters || {},
             invocationId: message.functionCall?.id || "",
           };
-          options.onToolCall?.(toolCall);
+          // Defer callback to avoid potential setState-during-render issues
+          setTimeout(() => {
+            options.onToolCall?.(toolCall);
+          }, 0);
         }
       });
 
       vapi.on("error", (error: any) => {
         console.error("Vapi error:", error);
-        const errorMessage = error?.message || "Voice call error";
+        const errorMessage = error?.message || error?.error?.message || "Voice call error";
         setState((prev) => ({ ...prev, error: errorMessage }));
         options.onError?.(new Error(errorMessage));
       });
 
-      // Start the call with the web call URL
-      await vapi.start(joinUrl);
+      // Format messages for Vapi if provided
+      const formattedMessages = options.messages
+        ?.map((msg) => {
+          const textPart = msg.parts.find((p) => p.type === "text" && p.text);
+          if (!textPart?.text) return null;
+          return {
+            role: msg.role === "user" ? "user" as const : msg.role === "system" ? "system" as const : "assistant" as const,
+            content: textPart.text,
+          };
+        })
+        .filter((m): m is { role: "user" | "assistant" | "system"; content: string } => m !== null) || [];
+
+      // Start the call with the assistant ID
+      const call = await vapi.start("7defa15b-5fcf-48d5-9bd6-07a676a8317c");
+
+      if (call?.id) {
+        setState((prev) => ({ ...prev, callId: call.id }));
+      }
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Failed to start call";
@@ -162,17 +187,11 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
     }
   }, [state.isConnecting, state.isConnected, options, updateStatus]);
 
-  const endCall = useCallback(async () => {
+  const endCall = useCallback(() => {
     if (!vapiRef.current) return;
 
     try {
       vapiRef.current.stop();
-
-      if (state.callId) {
-        await fetch(`/api/voice?callId=${state.callId}`, {
-          method: "DELETE",
-        });
-      }
     } catch (error) {
       console.error("Error ending call:", error);
     } finally {
@@ -188,7 +207,7 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
         isMuted: false,
       });
     }
-  }, [state.callId]);
+  }, []);
 
   const toggleMute = useCallback(() => {
     if (!vapiRef.current) return;
