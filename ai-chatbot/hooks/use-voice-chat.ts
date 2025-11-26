@@ -22,7 +22,7 @@ interface UseVoiceChatOptions {
   temperature?: number;
   messages?: ChatMessage[];
   onTranscriptUpdate?: (transcript: { role: string; text: string }[]) => void;
-  onStatusChange?: (status: UltravoxSessionStatus) => void;
+  onStatusChange?: (status: VogentStatus) => void;
   onToolCall?: (toolCall: ToolCall) => void;
   onError?: (error: Error) => void;
 }
