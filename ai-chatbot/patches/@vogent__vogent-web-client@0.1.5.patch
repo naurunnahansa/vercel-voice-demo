@@ -1,0 +1,25 @@
+diff --git a/package.json b/package.json
+index d9873e9dbd73f04450f94f6a2c0657e388e904c5..1fec4e91274879f8eb64462b160af8f03a4c5ed0 100644
+--- a/package.json
++++ b/package.json
+@@ -9,16 +9,16 @@
+     "graphql-ws": "^5.16.0",
+     "livekit-client": "2.15.8"
+   },
+-  "main": "src/index.ts",
+-  "types": "src/index.ts",
++  "main": "dist/index.js",
++  "types": "dist/index.d.ts",
+   "files": [
+     "dist",
+     "src"
+   ],
+   "exports": {
+     ".": {
+-      "types": "./src/index.ts",
+-      "default": "./src/index.ts"
++      "types": "./dist/index.d.ts",
++      "default": "./dist/index.js"
+     }
+   },
+   "repository": {
