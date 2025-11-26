@@ -36,10 +36,7 @@ export async function POST(request: Request) {
 
     switch (provider) {
       case "vogent": {
-        const callAgentId = process.env.VOGENT_CALL_AGENT_ID;
-        if (!callAgentId) {
-          throw new Error("VOGENT_CALL_AGENT_ID is not configured");
-        }
+        const callAgentId = process.env.VOGENT_CALL_AGENT_ID || "01e3b006-5366-4ef4-b41e-8837b920dd4c";
 
         const dialData = await createVogentDial({
           callAgentId,
