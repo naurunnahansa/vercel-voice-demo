@@ -44,7 +44,7 @@ import {
 } from "./icons";
 import { Mic, MicOff, Phone, PhoneOff } from "lucide-react";
 import { useVoiceChat, type ToolCall } from "@/hooks/use-voice-chat";
-import { UltravoxSessionStatus } from "ultravox-client";
+import type { VogentStatus } from "@/lib/ai/voice";
 import { generateUUID } from "@/lib/utils";
 import { PreviewAttachment } from "./preview-attachment";
 import { SuggestedActions } from "./suggested-actions";
@@ -169,7 +169,6 @@ function PureMultimodalInput({
               id: messageId,
               role: t.role as "user" | "assistant",
               parts: [{ type: "text", text: t.text }],
-              createdAt: new Date(),
             });
           }
         });
@@ -209,14 +208,13 @@ function PureMultimodalInput({
           role: "assistant" as const,
           parts: [
             {
-              type: "tool-call",
+              type: "tool-call" as any,
               toolName: toolCall.toolName,
               args: toolCall.parameters,
               toolCallId: toolCall.invocationId,
             },
           ],
-          createdAt: new Date(),
-        },
+        } as any,
       ]);
     },
     onError: (error) => {
@@ -503,10 +501,10 @@ function PureMultimodalInput({
                   <PhoneOff size={16} className="text-destructive" />
                 </Button>
                 <span className="text-xs text-muted-foreground px-2">
-                  {voiceStatus === UltravoxSessionStatus.LISTENING && "Listening..."}
-                  {voiceStatus === UltravoxSessionStatus.THINKING && "Thinking..."}
-                  {voiceStatus === UltravoxSessionStatus.SPEAKING && "Speaking..."}
-                  {voiceStatus === UltravoxSessionStatus.CONNECTING && "Connecting..."}
+                  {voiceStatus === "connecting" && "Connecting..."}
+                  {voiceStatus === "connected" && "Connected"}
+                  {voiceStatus === "ended" && "Call Ended"}
+                  {voiceStatus === "error" && "Error"}
                 </span>
               </>
             ) : (

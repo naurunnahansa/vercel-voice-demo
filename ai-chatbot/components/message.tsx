@@ -268,7 +268,7 @@ const PurePreviewMessage = ({
             }
 
             // Generic tool call display (for voice agent tools)
-            if (type === "tool-call") {
+            if ((type as string) === "tool-call") {
               const { toolCallId, toolName, args } = part as any;
 
               return (

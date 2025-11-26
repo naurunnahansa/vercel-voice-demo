@@ -1,21 +1,35 @@
 "use client";
 
-import { useVoiceChat } from "@/hooks/use-voice-chat";
+import { useState } from "react";
+import { useOmniChat } from "@/hooks/use-omni-chat";
+import { type VoiceProvider, PROVIDER_INFO } from "@/lib/ai/omni-voice";
 import { Button } from "./ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { cn } from "@/lib/utils";
 import { Mic, MicOff, Phone, PhoneOff } from "lucide-react";
 import { chatModels } from "@/lib/ai/models";
 
-interface VoicePanelProps {
+interface OmniVoicePanelProps {
   systemPrompt?: string;
   voice?: string;
   className?: string;
   selectedModelId: string;
   onModelChange?: (modelId: string) => void;
+  onTranscriptUpdate?: (transcripts: { role: string; text: string }[]) => void;
+  messages?: any[];
 }
 
-export function VoicePanel({ systemPrompt, voice, className, selectedModelId, onModelChange }: VoicePanelProps) {
+export function OmniVoicePanel({
+  systemPrompt,
+  voice,
+  className,
+  selectedModelId,
+  onModelChange,
+  onTranscriptUpdate,
+  messages,
+}: OmniVoicePanelProps) {
+  const [provider, setProvider] = useState<VoiceProvider>("vogent");
+
   const {
     isConnected,
     isConnecting,
@@ -27,20 +41,44 @@ export function VoicePanel({ systemPrompt, voice, className, selectedModelId, on
     startCall,
     endCall,
     toggleMute,
-  } = useVoiceChat({
+  } = useOmniChat({
+    provider,
     systemPrompt,
     voice,
+    messages,
+    onTranscriptUpdate,
     onError: (error) => {
       console.error("Voice error:", error);
     },
   });
 
   const isActive = isConnected || isConnecting;
-  const statusStr = String(status);
+  const statusStr = String(status).toLowerCase();
+
+  const handleProviderChange = (newProvider: string) => {
+    if (isActive) {
+      endCall();
+    }
+    setProvider(newProvider as VoiceProvider);
+  };
 
   return (
     <div className={cn("flex flex-col gap-4 p-4", className)}>
-      <div className="flex justify-center">
+      {/* Provider and Model Selection */}
+      <div className="flex justify-center gap-4">
+        <Select value={provider} onValueChange={handleProviderChange} disabled={isActive}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="Provider" />
+          </SelectTrigger>
+          <SelectContent>
+            {(Object.keys(PROVIDER_INFO) as VoiceProvider[]).map((p) => (
+              <SelectItem key={p} value={p}>
+                {PROVIDER_INFO[p].name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
         <Select value={selectedModelId} onValueChange={onModelChange}>
           <SelectTrigger className="w-48">
             <SelectValue />
@@ -54,6 +92,15 @@ export function VoicePanel({ systemPrompt, voice, className, selectedModelId, on
           </SelectContent>
         </Select>
       </div>
+
+      {/* Provider Badge */}
+      <div className="flex justify-center">
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
+          {PROVIDER_INFO[provider].name}
+        </span>
+      </div>
+
+      {/* Call Controls */}
       <div className="flex items-center justify-center gap-4">
         {!isActive ? (
           <Button
@@ -97,6 +144,7 @@ export function VoicePanel({ systemPrompt, voice, className, selectedModelId, on
         )}
       </div>
 
+      {/* Status Display */}
       <div className="text-center">
         <div
           className={cn(
@@ -106,13 +154,15 @@ export function VoicePanel({ systemPrompt, voice, className, selectedModelId, on
             statusStr === "thinking" && "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
             statusStr === "connecting" && "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
             statusStr === "connected" && "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
+            statusStr === "idle" && "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
             statusStr === "disconnected" && "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"
           )}
         >
           {(statusStr === "speaking" ||
             statusStr === "listening" ||
             statusStr === "thinking" ||
-            statusStr === "connected") && (
+            statusStr === "connected" ||
+            statusStr === "idle") && (
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-current opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-current"></span>
@@ -122,12 +172,14 @@ export function VoicePanel({ systemPrompt, voice, className, selectedModelId, on
         </div>
       </div>
 
+      {/* Error Display */}
       {error && (
         <div className="text-center text-sm text-red-600 dark:text-red-400">
           {error}
         </div>
       )}
 
+      {/* Transcript Display */}
       {transcripts.length > 0 && (
         <div className="max-h-60 overflow-y-auto rounded-lg border p-3 space-y-2">
           {transcripts.map((transcript, index) => (
