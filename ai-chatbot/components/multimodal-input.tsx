@@ -42,9 +42,15 @@ import {
   PaperclipIcon,
   StopIcon,
 } from "./icons";
-import { Mic, MicOff, Phone, PhoneOff } from "lucide-react";
-import { useVoiceChat, type ToolCall } from "@/hooks/use-voice-chat";
-import type { VogentStatus } from "@/lib/ai/voice";
+import { Mic, MicOff, Phone, PhoneOff, ChevronDown } from "lucide-react";
+import { useOmniChat, type ToolCall } from "@/hooks/use-omni-chat";
+import { type VoiceProvider, PROVIDER_INFO } from "@/lib/ai/omni-voice";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
 import { generateUUID } from "@/lib/utils";
 import { PreviewAttachment } from "./preview-attachment";
 import { SuggestedActions } from "./suggested-actions";
@@ -133,6 +139,7 @@ function PureMultimodalInput({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadQueue, setUploadQueue] = useState<string[]>([]);
   const transcriptMessageIdsRef = useRef<string[]>([]);
+  const [voiceProvider, setVoiceProvider] = useState<VoiceProvider>("vogent");
 
   const {
     isConnected: isVoiceConnected,
@@ -143,7 +150,8 @@ function PureMultimodalInput({
     startCall,
     endCall,
     toggleMute,
-  } = useVoiceChat({
+  } = useOmniChat({
+    provider: voiceProvider,
     messages,
     onTranscriptUpdate: async (newTranscripts) => {
       setMessages((prevMessages) => {
@@ -508,15 +516,36 @@ function PureMultimodalInput({
                 </span>
               </>
             ) : (
-              <Button
-                variant="ghost"
-                className="h-8 px-2"
-                onClick={startCall}
-                disabled={status !== "ready"}
-              >
-                <Phone size={16} />
-                <span className="hidden text-xs sm:block ml-1">Voice</span>
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="h-8 px-2"
+                    disabled={status !== "ready"}
+                  >
+                    <Phone size={16} />
+                    <span className="hidden text-xs sm:block ml-1">
+                      {PROVIDER_INFO[voiceProvider].name}
+                    </span>
+                    <ChevronDown size={12} className="ml-1" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  {(Object.keys(PROVIDER_INFO) as VoiceProvider[]).map((p) => (
+                    <DropdownMenuItem
+                      key={p}
+                      onClick={() => {
+                        setVoiceProvider(p);
+                        startCall();
+                      }}
+                      className="cursor-pointer"
+                    >
+                      <Phone size={14} className="mr-2" />
+                      {PROVIDER_INFO[p].name}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </PromptInputTools>
 
