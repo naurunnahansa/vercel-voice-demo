@@ -279,8 +279,15 @@ function useVapiProvider(
     if (!vapiRef.current) return;
     try {
       vapiRef.current.stop();
-    } catch (error) {
-      console.error("Error ending Vapi call:", error);
+    } catch (error: any) {
+      // Ignore "meeting ended" errors - these are normal call termination
+      const errorMessage = error?.message || "";
+      if (
+        !errorMessage.toLowerCase().includes("meeting ended") &&
+        !errorMessage.toLowerCase().includes("ejection")
+      ) {
+        console.error("Error ending Vapi call:", error);
+      }
     } finally {
       vapiRef.current = null;
     }
@@ -295,7 +302,11 @@ function useVapiProvider(
 
   const cleanup = useCallback(() => {
     if (vapiRef.current) {
-      vapiRef.current.stop();
+      try {
+        vapiRef.current.stop();
+      } catch {
+        // Ignore cleanup errors
+      }
       vapiRef.current = null;
     }
   }, []);
