@@ -543,7 +543,7 @@ function PureMultimodalInput({
                       key={p}
                       onClick={() => {
                         setVoiceProvider(p);
-                        startCall();
+                        startCall(p);
                       }}
                       className="cursor-pointer"
                     >

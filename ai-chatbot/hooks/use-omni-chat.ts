@@ -542,8 +542,9 @@ export function useOmniChat(options: UseOmniChatOptions) {
   const vapi = useVapiProvider(options, state, setState);
   const ultravox = useUltravoxProvider(options, state, setState);
 
-  const getProvider = useCallback(() => {
-    switch (options.provider) {
+  const getProvider = useCallback((providerOverride?: VoiceProvider) => {
+    const providerName = providerOverride || options.provider;
+    switch (providerName) {
       case "vogent":
         return vogent;
       case "vapi":
@@ -555,8 +556,8 @@ export function useOmniChat(options: UseOmniChatOptions) {
     }
   }, [options.provider, vogent, vapi, ultravox]);
 
-  const startCall = useCallback(async () => {
-    const provider = getProvider();
+  const startCall = useCallback(async (providerOverride?: VoiceProvider) => {
+    const provider = getProvider(providerOverride);
     await provider.startCall();
   }, [getProvider]);
 
