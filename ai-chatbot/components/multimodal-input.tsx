@@ -154,10 +154,15 @@ function PureMultimodalInput({
     provider: voiceProvider,
     messages,
     onTranscriptUpdate: async (newTranscripts) => {
+      // Filter out any empty transcripts (extra safety check)
+      const validTranscripts = newTranscripts.filter((t) => t.text && t.text.trim().length > 0);
+
+      if (validTranscripts.length === 0) return;
+
       setMessages((prevMessages) => {
         const updatedMessages = [...prevMessages];
 
-        newTranscripts.forEach((t, index) => {
+        validTranscripts.forEach((t, index) => {
           if (index < transcriptMessageIdsRef.current.length) {
             // Update existing message
             const messageId = transcriptMessageIdsRef.current[index];
@@ -185,9 +190,9 @@ function PureMultimodalInput({
       });
 
       // Save to database immediately
-      if (newTranscripts.length > 0 && transcriptMessageIdsRef.current.length > 0) {
+      if (validTranscripts.length > 0 && transcriptMessageIdsRef.current.length > 0) {
         try {
-          const messagesToSave = newTranscripts.map((t, index) => ({
+          const messagesToSave = validTranscripts.map((t, index) => ({
             id: transcriptMessageIdsRef.current[index],
             role: t.role,
             text: t.text,

@@ -64,10 +64,19 @@ function useVogentProvider(
 
   const handleTranscriptUpdate = useCallback(
     (transcript: Array<{ text: string; speaker: string }>) => {
-      const formattedTranscripts = transcript.map((t) => ({
-        role: t.speaker === "user" ? "user" : "assistant",
-        text: t.text,
-      }));
+      // Filter out empty/blank messages and map speaker to role
+      const formattedTranscripts = transcript
+        .filter((t) => t.text && t.text.trim().length > 0)
+        .map((t) => {
+          // Vogent uses "user" for user and "agent" for assistant
+          const speaker = String(t.speaker || "").toLowerCase();
+          const role = speaker === "user" ? "user" : "assistant";
+          console.log("[Vogent] Transcript:", { speaker: t.speaker, mappedRole: role, text: t.text?.substring(0, 30) });
+          return {
+            role,
+            text: t.text,
+          };
+        });
       setState((prev) => ({ ...prev, transcripts: formattedTranscripts }));
       options.onTranscriptUpdate?.(formattedTranscripts);
     },
