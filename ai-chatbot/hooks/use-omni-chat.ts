@@ -243,9 +243,22 @@ function useVapiProvider(
           if (!text.trim()) return;
 
           setState((prev) => {
-            const newTranscripts = [...prev.transcripts, { role, text }];
-            setTimeout(() => options.onTranscriptUpdate?.(newTranscripts), 0);
-            return { ...prev, transcripts: newTranscripts };
+            const transcripts = [...prev.transcripts];
+            const lastTranscript = transcripts[transcripts.length - 1];
+
+            // If the last transcript is from the same role, append to it
+            if (lastTranscript && lastTranscript.role === role) {
+              transcripts[transcripts.length - 1] = {
+                role,
+                text: lastTranscript.text + " " + text,
+              };
+            } else {
+              // Different role, create new transcript
+              transcripts.push({ role, text });
+            }
+
+            setTimeout(() => options.onTranscriptUpdate?.(transcripts), 0);
+            return { ...prev, transcripts };
           });
         }
 
