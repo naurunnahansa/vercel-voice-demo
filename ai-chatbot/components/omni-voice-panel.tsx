@@ -104,7 +104,7 @@ export function OmniVoicePanel({
       <div className="flex items-center justify-center gap-4">
         {!isActive ? (
           <Button
-            onClick={startCall}
+            onClick={() => startCall()}
             size="lg"
             className="gap-2 bg-green-600 hover:bg-green-700"
           >
