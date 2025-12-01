@@ -33,11 +33,19 @@ export interface VogentDialResult {
 export type VogentStatus = "connecting" | "connected" | "ended" | "error";
 
 export async function createVogentDial(config: VogentDialConfig): Promise<VogentDialResult> {
+  const apiKey = process.env.VOGENT_PUBLIC_API_KEY || "";
+
+  if (!apiKey) {
+    throw new Error("VOGENT_PUBLIC_API_KEY is not configured");
+  }
+
+  console.log("[Vogent] Creating dial with agent ID:", config.callAgentId);
+
   const response = await fetch("https://api.vogent.ai/api/dials", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.VOGENT_PUBLIC_API_KEY || ""}`,
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
       callAgentId: config.callAgentId,
@@ -47,6 +55,7 @@ export async function createVogentDial(config: VogentDialConfig): Promise<Vogent
 
   if (!response.ok) {
     const error = await response.text();
+    console.error("[Vogent] API error:", response.status, error);
     throw new Error(`Failed to create Vogent dial: ${error}`);
   }
 
