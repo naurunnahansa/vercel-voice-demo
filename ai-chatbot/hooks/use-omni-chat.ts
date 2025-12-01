@@ -68,9 +68,9 @@ function useVogentProvider(
       const formattedTranscripts = transcript
         .filter((t) => t.text && t.text.trim().length > 0)
         .map((t) => {
-          // Vogent uses "user" for user and "agent" for assistant
-          const speaker = String(t.speaker || "").toLowerCase();
-          const role = speaker === "user" ? "user" : "assistant";
+          // Vogent uses "HUMAN" for user and "AI" for assistant (uppercase)
+          const speaker = String(t.speaker || "").toUpperCase();
+          const role = speaker === "HUMAN" || speaker === "USER" ? "user" : "assistant";
           console.log("[Vogent] Transcript:", { speaker: t.speaker, mappedRole: role, text: t.text?.substring(0, 30) });
           return {
             role,
@@ -111,13 +111,19 @@ function useVogentProvider(
       callRef.current = call;
 
       call.on("status", (status: VogentStatus) => {
+        console.log("[Vogent] Status changed:", status);
+        // Vogent status can be: "connecting", "connected", "ended", "error"
+        const normalizedStatus = String(status).toLowerCase();
+        const isConnected = normalizedStatus === "connected";
         setState((prev) => ({
           ...prev,
-          status,
-          statusMessage: getVogentStatusMessage(status),
-          isConnected: status === "connected",
+          status: normalizedStatus,
+          statusMessage: getVogentStatusMessage(normalizedStatus as VogentStatus),
+          isConnected,
+          // Keep isConnecting false once connected
+          isConnecting: isConnected ? false : prev.isConnecting,
         }));
-        options.onStatusChange?.(status);
+        options.onStatusChange?.(normalizedStatus);
       });
 
       const unsubscribe = call.monitorTranscript(handleTranscriptUpdate);

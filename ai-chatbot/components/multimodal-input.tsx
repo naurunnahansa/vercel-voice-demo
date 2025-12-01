@@ -242,7 +242,9 @@ function PureMultimodalInput({
     }
   }, [isVoiceConnected, isVoiceConnecting]);
 
-  const isVoiceActive = isVoiceConnected || isVoiceConnecting;
+  // Voice is active if connected, connecting, or has an active status (not disconnected/ended)
+  const isVoiceActive = isVoiceConnected || isVoiceConnecting ||
+    (voiceStatus !== "disconnected" && voiceStatus !== "ended" && voiceStatus !== "error" && voiceStatus !== "");
 
   const submitForm = useCallback(() => {
     window.history.pushState({}, "", `/chat/${chatId}`);
